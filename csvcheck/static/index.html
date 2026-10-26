@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CSVCheck</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f4f5f7; color: #182330; font: 15px/1.5 system-ui, sans-serif; }
+    header { border-bottom: 1px solid #d8dde4; background: white; padding: 22px max(24px, calc((100vw - 1180px)/2)); }
+    h1 { font-size: 25px; margin: 0; letter-spacing: -.7px; }
+    h2 { font-size: 18px; margin: 0 0 14px; }
+    p { margin: 6px 0 15px; }
+    .muted, small { color: #5c6876; }
+    main { max-width: 1228px; padding: 24px; margin: auto; }
+    .layout { display: grid; grid-template-columns: 350px minmax(0, 1fr); gap: 22px; align-items: start; }
+    .panel { background: white; border: 1px solid #d8dde4; border-radius: 8px; padding: 22px; margin-bottom: 20px; min-width: 0; }
+    label { display: block; font-weight: 600; margin: 14px 0 7px; }
+    input[type=file] { width: 100%; padding: 14px 8px; border: 1px dashed #a8b3c1; border-radius: 5px; }
+    textarea { width: 100%; height: 290px; resize: vertical; border: 1px solid #bcc6d2; border-radius: 5px; padding: 12px; font: 12px/1.6 ui-monospace, monospace; }
+    button, .download { font: inherit; border: 1px solid #b8c4d3; border-radius: 5px; padding: 8px 13px; cursor: pointer; background: white; color: #254e81; text-decoration: none; display: inline-block; }
+    button:hover, .download:hover { background: #eef3f9; }
+    button:disabled { opacity: .55; cursor: wait; }
+    .primary { background: #24548c; color: white; border-color: #24548c; }
+    .primary:hover { background: #1c426e; }
+    .full { width: 100%; margin-top: 16px; }
+    .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .row h2 { margin-bottom: 0; }
+    .message { color: #a03023; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .message:empty { display: none; }
+    .scroll { overflow: auto; margin-top: 16px; }
+    table { border-collapse: collapse; width: 100%; text-align: left; font-size: 13px; }
+    th, td { padding: 10px; border-bottom: 1px solid #e3e7ee; white-space: nowrap; max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
+    th { color: #566577; font-weight: 600; background: #f8fafc; }
+    .job { cursor: pointer; }
+    .job:hover { background: #f3f7fc; }
+    .selected { background: #edf3fc; }
+    .badge { padding: 3px 8px; border-radius: 12px; background: #edf0f5; font-size: 12px; }
+    .completed { background: #e4f2e8; color: #21613a; }
+    .running { background: #e7effc; color: #214e91; }
+    .failed { background: #fbe9e6; color: #963524; }
+    .stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; margin: 18px 0; }
+    .stat { border: 1px solid #e0e5ec; border-radius: 5px; padding: 12px; }
+    .stat strong { display: block; font-size: 25px; font-weight: 650; }
+    .stat span { color: #596a7d; font-size: 12px; }
+    .links { display: flex; gap: 8px; flex-wrap: wrap; margin: 18px 0; }
+    .log { padding-left: 18px; font-size: 13px; color: #566577; }
+    .log li { margin: 5px 0; overflow-wrap: anywhere; }
+    code { font-size: 12px; }
+    .pager { display: flex; gap: 10px; justify-content: flex-end; align-items: center; margin-top: 14px; }
+    a { color: #24548c; }
+    @media(max-width: 900px) { .layout { grid-template-columns: 1fr; } textarea { height: 220px; } }
+    @media(max-width: 480px) { main { padding: 12px; } .panel { padding: 16px; } .stats { grid-template-columns: repeat(2,1fr); } }
+  </style>
+</head>
+<body>
+<header><h1>CSVCheck</h1><span class="muted">Check a dataset before using it.</span></header>
+<main>
+  <div class="layout">
+    <section class="panel">
+      <h2>New check</h2>
+      <p class="muted">Upload a CSV, set its rules, and download the cleaned records and a report of what failed.</p>
+      <form id="uploadForm">
+        <label for="file">CSV file</label>
+        <input id="file" type="file" accept=".csv" required>
+        <small>UTF-8, up to 20 MiB and 100,000 records.</small>
+        <label for="rules">Validation rules</label>
+        <textarea id="rules" spellcheck="false" aria-describedby="rulesHelp"></textarea>
+        <small id="rulesHelp">Column names must match your CSV headers. Dates use YYYY-MM-DD. Empty optional fields are allowed.</small>
+        <button class="primary full" id="submit">Run check</button>
+      </form>
+      <p id="uploadError" class="message" role="alert"></p>
+      <hr style="border:0;border-top:1px solid #e1e6ee;margin:22px 0">
+      <p><strong>Try the sample</strong><br><small>12 fictional records with missing values, invalid dates, and duplicates.</small></p>
+      <button id="sample">Load sample</button>
+      <a href="/api/sample" style="margin-left:10px">Download CSV</a>
+      <p style="margin-top:18px"><a href="/docs">API documentation</a></p>
+    </section>
+    <div>
+      <section class="panel">
+        <div class="row"><h2>Recent jobs</h2><button id="refresh">Refresh</button></div>
+        <p id="connectionError" class="message" role="alert"></p>
+        <div class="scroll"><table><thead><tr><th>File</th><th>Status</th><th>Created</th><th>Kept / total</th></tr></thead><tbody id="jobs"></tbody></table></div>
+        <div class="pager"><button id="previous">Previous</button><small id="page"></small><button id="next">Next</button></div>
+      </section>
+      <section class="panel" id="detail" aria-live="polite"><h2>Job details</h2><p class="muted">Upload a file or select a job to see the results.</p></section>
+    </div>
+  </div>
+</main>
+<script>
+const exampleRules = {
+  trim_whitespace: true,
+  deduplicate_by: ['email'],
+  columns: [
+    {name: 'email', kind: 'email', required: true, lowercase: true},
+    {name: 'age', kind: 'integer', minimum: 0, maximum: 120},
+    {name: 'joined', kind: 'date', required: true}
+  ]
+};
+const $ = id => document.getElementById(id);
+let selected = null;
+let offset = 0, busy = false;
+$('rules').value = JSON.stringify(exampleRules, null, 2);
+
+// File names and CSV values are untrusted text, so build cells without innerHTML.
+function node(tag, text, cls) {
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+async function request(url, options) {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    let body;
+    try { body = await response.json(); } catch { body = {}; }
+    throw Error(typeof body.detail === 'string' ? body.detail : `Request failed (${response.status})`);
+  }
+  return response.json();
+}
+
+function render_detail(job) {
+  const box = $('detail');
+  box.replaceChildren();
+  const title = node('div', undefined, 'row');
+  title.append(node('h2', job.filename), node('span', job.status, 'badge ' + job.status));
+  box.append(title, node('small', `Attempt ${job.attempts} · ${job.id.slice(0,8)}`));
+  if (job.error) box.append(node('p', job.error, 'message'));
+  if (job.status === 'failed' && job.attempts < 3) {
+    const retry = node('button', 'Retry job');
+    retry.onclick = async () => {
+      retry.disabled = true;
+      try { await request(`/api/jobs/${job.id}/retry`, {method:'POST'}); await loadJobs(); }
+      catch (e) { $('connectionError').textContent = e.message; }
+      finally { retry.disabled = false; }
+    };
+    box.append(retry);
+  }
+  const summary = job.summary;
+  if (summary) {
+    const stats = node('div', undefined, 'stats');
+    for (const [key, label] of [['total','Records'], ['kept','Kept'], ['invalid','Invalid'], ['duplicates','Duplicates']]) {
+      const stat = node('div', undefined, 'stat');
+      stat.append(node('strong', summary[key].toLocaleString()), node('span', label));
+      stats.append(stat);
+    }
+    box.append(stats);
+    box.append(node('p', `${summary.normalized_rows} records normalized · ${summary.duration_seconds.toFixed(3)}s processing time`, 'muted'));
+    const links = node('div', undefined, 'links');
+    for (const [name,label] of [['cleaned.csv','Cleaned CSV'], ['rejected.csv','Rejected records'], ['errors.csv','Errors'], ['summary.json','Summary JSON']]) {
+      const a = node('a', label, 'download');
+      a.href = `/api/jobs/${job.id}/files/${name}`;
+      links.append(a);
+    }
+    box.append(links);
+    if (Object.keys(summary.errors_by_column).length) {
+      box.append(node('h3', 'Validation issues'));
+      for (const [column,count] of Object.entries(summary.errors_by_column)) box.append(node('div', `${column}: ${count}`));
+    }
+    box.append(node('h3', 'Cleaned preview'));
+    if (!summary.preview.length) box.append(node('p', 'No records passed validation.', 'muted'));
+    else {
+      const scroll = node('div', undefined, 'scroll'), table = node('table');
+      const head = node('tr');
+      for (const name of summary.headers) head.append(node('th', name));
+      table.append(head);
+      for (const row of summary.preview) {
+        const tr = node('tr');
+        for (const name of summary.headers) { const td = node('td', row[name]); td.title = row[name]; tr.append(td); }
+        table.append(tr);
+      }
+      scroll.append(table); box.append(scroll);
+      box.append(node('small', 'First 10 valid, unique records.'));
+    }
+  } else if (job.status !== 'failed') box.append(node('p', 'Waiting for the worker. This view refreshes automatically.', 'muted'));
+  box.append(node('h3', 'Activity'));
+  const log = node('ul', undefined, 'log');
+  for (const event of job.events) log.append(node('li', `${new Date(event.at).toLocaleTimeString()} — ${event.message}`));
+  box.append(log);
+}
+
+async function loadJobs() {
+  if (busy) return;
+  busy = true;
+  try {
+    const result = await request(`/api/jobs?limit=10&offset=${offset}`);
+    $('jobs').replaceChildren();
+    if (!result.items.length) {
+      const tr = node('tr'), td = node('td', 'No jobs yet. Try the sample to get started.');
+      td.colSpan = 4; tr.append(td); $('jobs').append(tr);
+    }
+    for (const job of result.items) {
+      const tr = node('tr', undefined, 'job' + (selected === job.id ? ' selected' : ''));
+      const fileCell = node('td'), open = node('button', job.filename);
+      open.onclick = async () => { selected = job.id; await loadJobs(); };
+      fileCell.append(open); tr.append(fileCell);
+      const status = node('td'); status.append(node('span', job.status, 'badge ' + job.status));
+      tr.append(status, node('td', new Date(job.created_at).toLocaleString()), node('td', job.summary ? `${job.summary.kept} / ${job.summary.total}` : '—'));
+      $('jobs').append(tr);
+    }
+    $('previous').disabled = offset === 0;
+    $('next').disabled = offset + 10 >= result.total;
+    $('page').textContent = result.total ? `${offset + 1}–${Math.min(offset + 10, result.total)} of ${result.total}` : '0 jobs';
+    if (selected) render_detail(await request(`/api/jobs/${selected}`));
+    $('connectionError').textContent = '';
+  } catch(e) { $('connectionError').textContent = `Could not load jobs: ${e.message}`; }
+  finally { busy = false; }
+}
+
+$('uploadForm').onsubmit = async event => {
+  event.preventDefault();
+  $('submit').disabled = true; $('uploadError').textContent = '';
+  try {
+    const rules = JSON.parse($('rules').value);
+    const form = new FormData();
+    form.append('file', $('file').files[0]); form.append('rules', JSON.stringify(rules));
+    const job = await request('/api/jobs', {method:'POST', body: form});
+    selected = job.id; offset = 0;
+    await loadJobs();
+  } catch(e) { $('uploadError').textContent = e.message; }
+  finally { $('submit').disabled = false; }
+};
+$('sample').onclick = async () => {
+  $('sample').disabled = true;
+  try {
+    const response = await fetch('/api/sample');
+    if (!response.ok) throw Error('Could not load the sample.');
+    const files = new DataTransfer();
+    files.items.add(new File([await response.blob()], 'sample.csv', {type:'text/csv'}));
+    $('file').files = files.files;
+    $('rules').value = JSON.stringify(exampleRules, null, 2);
+    $('uploadError').textContent = '';
+  } catch(e) { $('uploadError').textContent = e.message; }
+  finally { $('sample').disabled = false; }
+};
+$('refresh').onclick = loadJobs;
+$('previous').onclick = () => { offset = Math.max(0, offset - 10); loadJobs(); };
+$('next').onclick = () => { offset += 10; loadJobs(); };
+loadJobs();
+setInterval(loadJobs, 2500);
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+id,name,email,age,joined
+1, Alice Morgan , ALICE@example.com ,24,2026-01-15
+2,Ben Ortiz,ben@example.com,31,2026-02-03
+3,Missing Email,,22,2026-02-10
+4,Invalid Email,not-an-email,28,2026-02-11
+5,Duplicate Alice,alice@example.com,24,2026-02-12
+6,Negative Age,negative@example.com,-5,2026-02-14
+7,Invalid Date,date@example.com,30,2026-02-30
+8,Chloe Singh,chloe@example.com,20,2026-03-01
+9,Optional Age,optional@example.com,,2026-03-02
+10,Decimal Age,decimal@example.com,24.5,2026-03-03
+11,Daniel Reed,daniel@example.com,45,2026-03-05
+12,Duplicate Ben,BEN@EXAMPLE.COM,31,2026-03-06
